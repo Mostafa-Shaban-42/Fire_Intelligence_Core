@@ -1,0 +1,72 @@
+interactions:
+- request:
+    body: '{"camera_id": "replay-cam-01", "frame_id": 3, "timestamp": 1786917231.284279,
+      "detections": [{"bbox": {"xmin": 120.0, "ymin": 140.0, "xmax": 250.0, "ymax":
+      300.0}, "confidence": 0.345, "detection_type": "fire"}], "temperature_celsius":
+      31.2, "smoke_ppm": 56.0}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '260'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.5
+    method: POST
+    uri: http://localhost:8000/detections/ingest
+  response:
+    body:
+      string: '{"camera_id":"replay-cam-01","frame_id":3,"active_tracks_count":0,"scene_risk_score":0.0,"incident_triggered":false,"incident_id":null}'
+    headers:
+      content-length:
+      - '135'
+      content-type:
+      - application/json
+      date:
+      - Sun, 16 Aug 2026 21:53:52 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"camera_id": "replay-cam-01", "frame_id": 39, "timestamp": 1786917233.8541577,
+      "detections": [{"bbox": {"xmin": 120.0, "ymin": 140.0, "xmax": 250.0, "ymax":
+      300.0}, "confidence": 0.885, "detection_type": "fire"}], "temperature_celsius":
+      45.6, "smoke_ppm": 128.0}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '263'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.5
+    method: POST
+    uri: http://localhost:8000/detections/ingest
+  response:
+    body:
+      string: '{"camera_id":"replay-cam-01","frame_id":39,"active_tracks_count":1,"scene_risk_score":55.52,"incident_triggered":false,"incident_id":null}'
+    headers:
+      content-length:
+      - '138'
+      content-type:
+      - application/json
+      date:
+      - Sun, 16 Aug 2026 21:53:56 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+version: 1
