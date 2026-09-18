@@ -108,7 +108,7 @@ logs/
 
 
 # ============================================================
-# Data
+# Data & Heavy Media Outputs
 # ============================================================
 
 data/raw/*
@@ -119,6 +119,13 @@ data/cache/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/cache/.gitkeep
+
+# Output Runs and Heavy Media Files
+runs/
+*.avi
+*.mp4
+*.mkv
+*.mov
 
 
 # ============================================================
