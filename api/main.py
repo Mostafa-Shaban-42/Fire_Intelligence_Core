@@ -5,21 +5,35 @@ import logging
 import multiprocessing
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from api.middleware.request_timing import request_timing_middleware
+try:
+    from api.middleware.request_timing import request_timing_middleware
+except ImportError:
+    request_timing_middleware = None
+
 from api.routes import (
     cameras_router,
     detections_router,
-    health_router,
-    incidents_router,
 )
-from configs.settings import settings
+
+try:
+    from api.routes import health_router, incidents_router
+except ImportError:
+    health_router = None
+    incidents_router = None
+
+try:
+    from configs.settings import settings
+    log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
+except Exception:
+    log_level = logging.INFO
+
 from core.engine.pipeline_worker import pipeline_worker
 
 logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("fire_intelligence_api")
@@ -31,7 +45,7 @@ async def lifespan(app: FastAPI):
     cpu_count = max(1, multiprocessing.cpu_count() - 1)
     process_pool = ProcessPoolExecutor(max_workers=cpu_count)
     app.state.process_pool = process_pool
-    
+
     await pipeline_worker.start()
     yield
 
@@ -47,6 +61,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 @app.exception_handler(Exception)
 async def api_global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -54,7 +69,9 @@ async def api_global_exception_handler(request: Request, exc: Exception):
         content={"status": "error", "message": "Service handling load shed", "detail": str(exc)},
     )
 
-app.middleware("http")(request_timing_middleware)
+
+if request_timing_middleware:
+    app.middleware("http")(request_timing_middleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +81,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router)
 app.include_router(cameras_router)
 app.include_router(detections_router)
-app.include_router(incidents_router)
+
+if health_router:
+    app.include_router(health_router)
+if incidents_router:
+    app.include_router(incidents_router)

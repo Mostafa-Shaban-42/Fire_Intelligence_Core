@@ -1,14 +1,22 @@
 from __future__ import annotations
-import logging, threading, os, queue, time
+
+import logging
+import os
+import queue
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-import numpy as np
+
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CUSTOM_WEIGHTS_PATH = PROJECT_ROOT / "weights" / "best.pt"
+
 
 class FireDetector:
     def __init__(self, confidence_threshold=0.25, iou_threshold=0.45):
@@ -22,6 +30,7 @@ class FireDetector:
         self.is_running = False
         self.worker_thread = None
         self.processed_frames_count = 0
+        self.start_time = time.time()
 
     def load(self) -> bool:
         with self._lock:
@@ -56,13 +65,13 @@ class FireDetector:
                 frame = self.frame_queue.get(timeout=0.03)
                 if frame is None:
                     continue
-                
+
                 results = self._model.predict(
                     source=frame,
                     conf=self.confidence_threshold,
                     iou=self.iou_threshold,
                     imgsz=640,
-                    verbose=False
+                    verbose=False,
                 )
 
                 dets = []
@@ -70,13 +79,12 @@ class FireDetector:
                     for box in results[0].boxes:
                         c = float(box.conf.item())
                         cls_id = int(box.cls.item())
-                        # Normalized Bounding Box coordinates (0.0 to 1.0)
                         xyxy_norm = box.xyxyn[0].tolist()
                         cls_name = results[0].names.get(cls_id, "fire")
                         dets.append({
                             "norm_box": xyxy_norm,
                             "confidence": c,
-                            "class_name": cls_name
+                            "class_name": cls_name,
                         })
                 self.latest_raw_boxes = dets
                 self.processed_frames_count += 1
@@ -88,7 +96,7 @@ class FireDetector:
     def detect_and_draw(self, frame: np.ndarray) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
         if frame is None or frame.size == 0:
             return frame, []
-            
+
         if self._model is None:
             self.load()
 
@@ -106,7 +114,6 @@ class FireDetector:
 
         for item in raw_boxes:
             nx1, ny1, nx2, ny2 = item["norm_box"]
-            # Scale coordinates back to original frame size
             x1, y1 = int(nx1 * w), int(ny1 * h)
             x2, y2 = int(nx2 * w), int(ny2 * h)
             c = item["confidence"]
@@ -123,13 +130,42 @@ class FireDetector:
             current_dets.append({
                 "detection_type": label.lower(),
                 "confidence": c,
-                "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
             })
 
         return annotated_frame, current_dets
 
+    def process_frame_sync(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+        _, detections = self.detect_and_draw(frame)
+        return detections
+
+    def annotate_frame_in_place(self, frame: np.ndarray, detections: List[Dict[str, Any]]):
+        h, w = frame.shape[:2]
+        for det in detections:
+            bbox = det.get("bbox", {})
+            x1, y1 = bbox.get("x1", 0), bbox.get("y1", 0)
+            x2, y2 = bbox.get("x2", w), bbox.get("y2", h)
+            label = det.get("detection_type", "fire")
+            c = det.get("confidence", 0.0)
+
+            color = (0, 0, 255) if "fire" in label.lower() else (255, 165, 0)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+
+    def get_metrics(self) -> Dict[str, Any]:
+        uptime = time.time() - self.start_time
+        fps = round(self.processed_frames_count / uptime, 2) if uptime > 0 else 0.0
+        return {
+            "processed_frames": self.processed_frames_count,
+            "fps": fps,
+            "is_loaded": self.is_loaded,
+            "model_path": str(self.model_path),
+        }
+
+
 _detector_instance = None
-def get_fire_detector():
+
+
+def get_fire_detector() -> FireDetector:
     global _detector_instance
     if _detector_instance is None:
         _detector_instance = FireDetector()

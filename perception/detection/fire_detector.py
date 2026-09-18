@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -16,15 +16,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CUSTOM_WEIGHTS_PATH = PROJECT_ROOT / "weights" / "best.onnx"
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "models" / "fire_detector.onnx"
 
-# ألوان BGR معتمدة وخفيفة
-COLOR_FIRE_BGR = (0, 0, 255)      # أحمر ناصع للنار
-COLOR_SMOKE_BGR = (128, 128, 128) # رصاصي للدخان
+COLOR_FIRE_BGR = (0, 0, 255)      # Bright Red for Fire
+COLOR_SMOKE_BGR = (128, 128, 128) # Grey for Smoke
 
 
 class FireDetector:
     def __init__(
         self,
-        confidence_threshold: float = 0.08,  # خفض العتبة لزيادة الاكتشاف
+        confidence_threshold: float = 0.10,  # Set to 10% confidence threshold
         iou_threshold: float = 0.45,
         target_imgsz: int = 640,
     ):
@@ -55,6 +54,10 @@ class FireDetector:
 
     def is_ready(self) -> bool:
         return self._session is not None or self.load()
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._session is not None
 
     def process_frame_sync(self, frame: np.ndarray) -> List[Dict[str, Any]]:
         if frame is None or frame.size == 0 or not self.is_ready():
@@ -110,14 +113,14 @@ class FireDetector:
                             "x1": max(0, min(orig_w, x1)),
                             "y1": max(0, min(orig_h, y1)),
                             "x2": max(0, min(orig_w, x1 + w)),
-                            "y2": max(0, min(orig_h, y1 + h)),
+                            "y2": max(0, min(orig_h, y2 + h if 'y2' in locals() else y1 + h)),
                         },
                     })
         return dets
 
     def annotate_frame_in_place(self, frame: np.ndarray, detections: List[Dict[str, Any]]) -> None:
         """
-        رسم المربعات الحدودية والنصوص فقط بأعلى سرعة وبدون تظليل.
+        Draw bounding boxes and labels with optimal performance.
         """
         if not detections:
             return
@@ -137,13 +140,10 @@ class FireDetector:
             det_type = det.get("detection_type", "fire").lower()
             conf = det.get("confidence", 0.0)
 
-            # تحديد اللون بناءً على النوع
             color = COLOR_FIRE_BGR if det_type == "fire" else COLOR_SMOKE_BGR
 
-            # 1. رسم المربع المحيط فقط
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
 
-            # 2. رسم بطاقة اسم الفئة والنسبة
             label = f" {det_type.upper()}: {conf:.2f} "
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
 
@@ -159,8 +159,21 @@ class FireDetector:
                 cv2.LINE_AA,
             )
 
+    def detect_and_draw(self, frame: np.ndarray) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+        """
+        Compatibility function to process frame, annotate detections, and return output for streaming.
+        """
+        if frame is None or frame.size == 0:
+            return frame, []
+
+        annotated_frame = frame.copy()
+        detections = self.process_frame_sync(annotated_frame)
+        self.annotate_frame_in_place(annotated_frame, detections)
+        return annotated_frame, detections
+
 
 _detector_instance: Optional[FireDetector] = None
+
 
 def get_fire_detector() -> FireDetector:
     global _detector_instance

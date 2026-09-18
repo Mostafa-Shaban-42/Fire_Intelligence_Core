@@ -20,11 +20,6 @@ SOUNDS_DIR = (
     / "sounds"
 )
 
-MODELS_DIR = (
-    DASHBOARD_DIR
-    / "models"
-)
-
 ALARM_SOUND_PATH = (
     SOUNDS_DIR
     / "alarm.wav"
@@ -96,44 +91,8 @@ DEFAULT_TARGET_FPS = int(
 
 
 # ==============================================================================
-# FIRE DETECTION & ALARM CONFIDENCE THRESHOLDS
+# FRAME PROCESSING & STREAMING
 # ==============================================================================
-
-FIRE_MODEL_PATH = os.getenv(
-    "FIRE_MODEL_PATH",
-    str(
-        MODELS_DIR
-        / "fire_detector.pt"
-    ),
-)
-
-# عتبة إظهار التحديد على الشاشة (أي نار بـ 15% فما فوق تظهر)
-FIRE_CONFIDENCE_THRESHOLD = float(
-    os.getenv(
-        "FIRE_CONFIDENCE_THRESHOLD",
-        "0.15",
-    )
-)
-
-# عتبة إطلاق التنبيه الصوتي (الصوت يعمل الآن عند 25% أو أعلى)
-ALARM_TRIGGER_CONFIDENCE_THRESHOLD = float(
-    os.getenv(
-        "ALARM_TRIGGER_CONFIDENCE_THRESHOLD",
-        "0.15",
-    )
-)
-
-
-# ==============================================================================
-# FRAME PROCESSING
-# ==============================================================================
-
-INFERENCE_INTERVAL_SECONDS = float(
-    os.getenv(
-        "INFERENCE_INTERVAL_SECONDS",
-        "0.20",
-    )
-)
 
 FRAME_SEND_INTERVAL_SECONDS = float(
     os.getenv(

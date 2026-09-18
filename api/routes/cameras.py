@@ -1,44 +1,47 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Dict, List, Optional
 
 import cv2
-import requests
+import httpx
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from perception.detection.fire_detector import get_fire_detector
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/cameras", tags=["Camera Streams"])
 
 
-def get_user_location() -> tuple[float, float, str]:
+async def get_user_location_async() -> tuple[float, float, str]:
+    """Non-blocking IP Geolocation lookup using httpx async client."""
     try:
-        response = requests.get("https://ipapi.co/json/", timeout=1.0)
-        if response.status_code == 200:
-            data = response.json()
-            return (
-                float(data.get("latitude", 30.0444)),
-                float(data.get("longitude", 31.2357)),
-                f"{data.get('city', '')}, {data.get('country_name', '')}".strip(", "),
-            )
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            response = await client.get("https://ipapi.co/json/")
+            if response.status_code == 200:
+                data = response.json()
+                return (
+                    float(data.get("latitude", 30.0444)),
+                    float(data.get("longitude", 31.2357)),
+                    f"{data.get('city', '')}, {data.get('country_name', '')}".strip(", "),
+                )
+    except Exception as exc:
+        logger.warning(f"Failed to resolve IP location asynchronously: {exc}")
     return 30.0444, 31.2357, "Default System"
 
-
-default_lat, default_lng, default_loc_name = get_user_location()
 
 CAMERA_REGISTRY: Dict[str, dict] = {
     "cam_default": {
         "camera_id": "cam_default",
-        "location": f"Local System ({default_loc_name})",
+        "location": "Local System (Default)",
         "rtsp_url": "0",
-        "latitude": default_lat,
-        "longitude": default_lng,
+        "latitude": 30.0444,
+        "longitude": 31.2357,
         "is_active": True,
         "has_fire": False,
         "registered_at": time.time(),
@@ -76,7 +79,7 @@ async def register_camera(payload: CameraRegisterRequest):
 
     record = payload.model_dump()
     if record["latitude"] is None or record["longitude"] is None:
-        auto_lat, auto_lng, _ = get_user_location()
+        auto_lat, auto_lng, _ = await get_user_location_async()
         record["latitude"] = auto_lat
         record["longitude"] = auto_lng
 
@@ -112,7 +115,7 @@ def generate_camera_stream(camera_id: str, source: str | int = 0):
         source = int(source)
 
     cap = cv2.VideoCapture(source)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # تسريع الاستجابة بدون أي Lag
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     detector = get_fire_detector()
     if not detector.is_ready():
@@ -127,18 +130,13 @@ def generate_camera_stream(camera_id: str, source: str | int = 0):
                     continue
                 break
 
-            # الكشف الفوري
-            detections = detector.process_frame_sync(frame)
+            annotated_frame, detections = detector.detect_and_draw(frame)
 
             fire_active = any(d.get("detection_type") == "fire" for d in detections)
             if camera_id in CAMERA_REGISTRY:
                 CAMERA_REGISTRY[camera_id]["has_fire"] = fire_active
 
-            # الرسم المباشر للتظلل المشابه لشكل النار والدخان
-            detector.annotate_frame_in_place(frame, detections)
-
-            # التشفير الفوري لسلاسة العرض
-            ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            ret, buffer = cv2.imencode(".jpg", annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             if not ret:
                 continue
 
