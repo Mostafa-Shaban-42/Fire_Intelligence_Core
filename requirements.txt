@@ -5,10 +5,12 @@ fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 
 # ============================================================
-# Live Demo Interface (Streamlit)
+# Live Demo Interface (Streamlit & Maps)
 # ============================================================
 streamlit>=1.30.0
 opencv-python-headless>=4.8.0
+folium
+streamlit-folium
 
 # ============================================================
 # Data & Settings
